@@ -12,7 +12,7 @@ import java.util.UUID;
 @Table(name = "rendimentos")
 @Getter
 @Setter
-@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@NoArgsConstructor(access = AccessLevel.PUBLIC)
 public class Rendimento {
 
     @Id
