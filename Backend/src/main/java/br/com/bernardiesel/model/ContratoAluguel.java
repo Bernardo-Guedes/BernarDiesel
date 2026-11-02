@@ -13,7 +13,7 @@ import java.util.UUID;
 @Table(name = "contratos_aluguel")
 @Getter
 @Setter
-@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@NoArgsConstructor(access = AccessLevel.PUBLIC)
 public class ContratoAluguel {
 
     @Id
