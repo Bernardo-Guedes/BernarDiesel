@@ -13,7 +13,7 @@ import lombok.Setter;
 @Table(name = "clientes")
 @Getter
 @Setter
-@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@NoArgsConstructor(access = AccessLevel.PUBLIC)
 public class Cliente extends Usuario implements Proprietario {
 
     @Column(nullable = false)
