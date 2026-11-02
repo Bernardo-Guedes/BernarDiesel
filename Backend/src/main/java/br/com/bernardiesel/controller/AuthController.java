@@ -43,16 +43,5 @@ public class AuthController {
 
         return ResponseEntity.ok(resposta);
     }
-
-    @GetMapping("/me")
-    public ResponseEntity<?> usuarioAutenticado(
-            org.springframework.security.core.Authentication authentication
-    ) {
-
-        return ResponseEntity.ok(
-                java.util.Map.of(
-                        "email", authentication.getName()
-                )
-        );
-    }
+    
 }
