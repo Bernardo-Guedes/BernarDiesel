@@ -1,19 +1,22 @@
 package br.com.bernardiesel.model;
 
-import br.com.bernardiesel.model.enums.ResultadoParecer;
+import java.time.LocalDateTime;
+import java.util.UUID;
+
 import jakarta.persistence.*;
+
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import java.time.LocalDateTime;
-import java.util.UUID;
+
+import br.com.bernardiesel.model.enums.ResultadoParecer;
 
 @Entity
 @Table(name = "pareceres_financeiros")
 @Getter
 @Setter
-@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@NoArgsConstructor(access = AccessLevel.PUBLIC)
 public class ParecerFinanceiro {
 
     @Id
@@ -30,11 +33,16 @@ public class ParecerFinanceiro {
     @Column(nullable = false)
     private LocalDateTime dataAvaliacao;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "pedido_id", nullable = false)
+    @OneToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(
+            name = "pedido_id",
+            nullable = false,
+            unique = true
+    )
     private Pedido pedido;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "agente_id", nullable = false)
     private Agente agente;
+
 }

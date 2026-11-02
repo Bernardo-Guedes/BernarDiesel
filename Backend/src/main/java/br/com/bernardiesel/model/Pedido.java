@@ -1,15 +1,15 @@
 package br.com.bernardiesel.model;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.UUID;
+
 import jakarta.persistence.*;
+
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
 
 import br.com.bernardiesel.model.enums.StatusPedido;
 
@@ -45,7 +45,11 @@ public class Pedido {
     @JoinColumn(name = "automovel_id", nullable = false)
     private Automovel automovel;
 
-    @OneToMany(mappedBy = "pedido", cascade = CascadeType.ALL)
-    private List<ParecerFinanceiro> pareceresFinanceiros =
-        new ArrayList<>();
+    @OneToOne(
+            mappedBy = "pedido",
+            cascade = CascadeType.ALL,
+            orphanRemoval = true
+    )
+    private ParecerFinanceiro parecerFinanceiro;
+
 }
