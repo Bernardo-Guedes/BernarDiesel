@@ -10,7 +10,7 @@ import lombok.Setter;
 @Table(name = "bancos")
 @Getter
 @Setter
-@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@NoArgsConstructor(access = AccessLevel.PUBLIC)
 public class Banco extends Agente implements Proprietario {
 
     @Column(nullable = false)

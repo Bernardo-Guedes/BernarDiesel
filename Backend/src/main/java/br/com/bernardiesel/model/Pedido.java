@@ -17,7 +17,7 @@ import br.com.bernardiesel.model.enums.StatusPedido;
 @Table(name = "pedidos")
 @Getter
 @Setter
-@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@NoArgsConstructor(access = AccessLevel.PUBLIC)
 public class Pedido {
 
     @Id

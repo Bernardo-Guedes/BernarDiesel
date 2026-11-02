@@ -15,7 +15,7 @@ import jakarta.persistence.*;
 @Table(name = "automoveis")
 @Getter
 @Setter
-@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@NoArgsConstructor(access = AccessLevel.PUBLIC)
 public class Automovel {
 
     @Id
