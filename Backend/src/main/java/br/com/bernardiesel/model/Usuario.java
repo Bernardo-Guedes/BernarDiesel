@@ -1,13 +1,15 @@
 package br.com.bernardiesel.model;
-import lombok.AccessLevel;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
 
 import java.util.UUID;
 
 import br.com.bernardiesel.model.enums.Perfil;
+
 import jakarta.persistence.*;
+
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Entity
 @Table(name = "usuarios")
@@ -21,7 +23,7 @@ public abstract class Usuario {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(nullable = false, unique = true, length = 50)
+    @Column(nullable = false, unique = true, length = 255)
     private String login;
 
     @Column(nullable = false)
@@ -33,4 +35,7 @@ public abstract class Usuario {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private Perfil perfil;
+
+    @Column(nullable = false, columnDefinition = "BOOLEAN DEFAULT TRUE")
+    private Boolean ativo = true;
 }

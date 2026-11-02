@@ -10,4 +10,6 @@ import br.com.bernardiesel.model.Banco;
 public interface BancoRepository extends JpaRepository<Banco, UUID> {
 
     Optional<Banco> findByEmail(String email);
+
+    boolean existsByCnpj(String cnpj);
 }
