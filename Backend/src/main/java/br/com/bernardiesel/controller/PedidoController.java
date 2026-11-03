@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.*;
 
 import br.com.bernardiesel.dto.pedido.AtualizarPedidoRequest;
 import br.com.bernardiesel.dto.pedido.CriarPedidoRequest;
+import br.com.bernardiesel.dto.pedido.PedidoDetalheResponse;
 import br.com.bernardiesel.dto.pedido.PedidoResponse;
 import br.com.bernardiesel.service.PedidoService;
 
@@ -51,17 +52,14 @@ public class PedidoController {
         );
     }
 
-    // Buscar um pedido específico
+    // Buscar detalhe do pedido, incluindo parecer e contratos quando existirem.
     @GetMapping("/{id}")
-    public ResponseEntity<PedidoResponse> buscarPorId(
-            Authentication authentication,
-            @PathVariable UUID id) {
+    public ResponseEntity<PedidoDetalheResponse> buscarPorId(
+        Authentication authentication,
+        @PathVariable UUID id) {
 
         return ResponseEntity.ok(
-                pedidoService.buscarPorId(
-                        authentication.getName(),
-                        id
-                )
+            pedidoService.buscarDetalhePorCliente(authentication.getName(), id)
         );
     }
 
