@@ -13,6 +13,7 @@ import br.com.bernardiesel.dto.pedido.AtualizarPedidoRequest;
 import br.com.bernardiesel.dto.pedido.CriarPedidoRequest;
 import br.com.bernardiesel.dto.pedido.PedidoDetalheResponse;
 import br.com.bernardiesel.dto.pedido.PedidoResponse;
+import br.com.bernardiesel.dto.rendimento.RendimentoResponse;
 import br.com.bernardiesel.model.Agente;
 import br.com.bernardiesel.model.Automovel;
 import br.com.bernardiesel.model.Banco;
@@ -234,6 +235,26 @@ public class PedidoService {
                 }
 
                 return converterParaDetalhe(pedido);
+        }
+
+        @Transactional(readOnly = true)
+        public List<RendimentoResponse> listarRendimentosDoClientePorAgente(
+                        String email,
+                        UUID pedidoId) {
+
+                buscarDetalhePorAgente(email, pedidoId);
+
+                Pedido pedido = pedidoRepository.findById(pedidoId)
+                                .orElseThrow(() -> new EntityNotFoundException(
+                                                "Pedido não encontrado."));
+
+                return pedido.getCliente().getRendimentos()
+                                .stream()
+                                .map(r -> new RendimentoResponse(
+                                                r.getId(),
+                                                r.getEntidadeEmpregadora(),
+                                                r.getValor()))
+                                .toList();
         }
 
         private Cliente buscarClientePorEmail(String email) {
