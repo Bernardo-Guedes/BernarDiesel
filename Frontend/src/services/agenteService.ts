@@ -10,6 +10,7 @@ import type {
   PedidoDetalhe,
   ParecerRequest,
   Rendimento,
+  AtualizarPedidoRequest,
 } from '../types'
 
 export const agenteService = {
@@ -19,6 +20,15 @@ export const agenteService = {
 
   detalhePedido: (id: string) =>
     api.get<PedidoDetalhe>(`/api/agentes/me/pedidos/${id}`).then((r) => r.data),
+
+  /** Altera as datas de um pedido que ainda está em análise. */
+  atualizarPeriodoPedido: (pedidoId: string, dados: AtualizarPedidoRequest) =>
+    api
+      .put<PedidoDetalhe>(
+        `/api/agentes/me/pedidos/${pedidoId}/periodo`,
+        dados,
+      )
+      .then((r) => r.data),
 
   /** Rendimentos do cliente dono do pedido (base da análise financeira). */
   rendimentosDoPedido: (pedidoId: string) =>
@@ -38,7 +48,9 @@ export const agenteService = {
 
   contratarPedido: (pedidoId: string) =>
     api
-      .post<ContratoAluguel>(`/api/agentes/me/pedidos/${pedidoId}/contrato`)
+      .post<ContratoAluguel>(
+        `/api/agentes/me/pedidos/${pedidoId}/contrato`,
+      )
       .then((r) => r.data),
 
   meusContratos: () =>
@@ -53,7 +65,10 @@ export const creditoBancoService = {
       .get<ContratoCredito[]>('/api/bancos/me/contratos/aluguel/disponiveis')
       .then((r) => r.data),
 
-  conceder: (contratoAluguelId: string, dados: CriarCreditoRequest) =>
+  conceder: (
+    contratoAluguelId: string,
+    dados: CriarCreditoRequest,
+  ) =>
     api
       .post<ContratoCredito>(
         `/api/bancos/me/contratos/${contratoAluguelId}/credito`,

@@ -1,3 +1,4 @@
+
 package br.com.bernardiesel.service;
 
 import java.math.BigDecimal;
@@ -37,376 +38,421 @@ import jakarta.persistence.EntityNotFoundException;
 @Transactional
 public class PedidoService {
 
-        private final PedidoRepository pedidoRepository;
-        private final ClienteRepository clienteRepository;
-        private final AutomovelRepository automovelRepository;
-        private final AgenteRepository agenteRepository;
-        private final ParecerFinanceiroRepository parecerFinanceiroRepository;
-        private final ContratoAluguelRepository contratoAluguelRepository;
-        private final ContratoCreditoRepository contratoCreditoRepository;
+    private final PedidoRepository pedidoRepository;
+    private final ClienteRepository clienteRepository;
+    private final AutomovelRepository automovelRepository;
+    private final AgenteRepository agenteRepository;
+    private final ParecerFinanceiroRepository parecerFinanceiroRepository;
+    private final ContratoAluguelRepository contratoAluguelRepository;
+    private final ContratoCreditoRepository contratoCreditoRepository;
 
-        public PedidoService(
-                        PedidoRepository pedidoRepository,
-                        ClienteRepository clienteRepository,
-                        AutomovelRepository automovelRepository,
-                        AgenteRepository agenteRepository,
-                        ParecerFinanceiroRepository parecerFinanceiroRepository,
-                        ContratoAluguelRepository contratoAluguelRepository,
-                        ContratoCreditoRepository contratoCreditoRepository) {
+    public PedidoService(
+            PedidoRepository pedidoRepository,
+            ClienteRepository clienteRepository,
+            AutomovelRepository automovelRepository,
+            AgenteRepository agenteRepository,
+            ParecerFinanceiroRepository parecerFinanceiroRepository,
+            ContratoAluguelRepository contratoAluguelRepository,
+            ContratoCreditoRepository contratoCreditoRepository) {
 
-                this.pedidoRepository = pedidoRepository;
-                this.clienteRepository = clienteRepository;
-                this.automovelRepository = automovelRepository;
-                this.agenteRepository = agenteRepository;
-                this.parecerFinanceiroRepository = parecerFinanceiroRepository;
-                this.contratoAluguelRepository = contratoAluguelRepository;
-                this.contratoCreditoRepository = contratoCreditoRepository;
+        this.pedidoRepository = pedidoRepository;
+        this.clienteRepository = clienteRepository;
+        this.automovelRepository = automovelRepository;
+        this.agenteRepository = agenteRepository;
+        this.parecerFinanceiroRepository = parecerFinanceiroRepository;
+        this.contratoAluguelRepository = contratoAluguelRepository;
+        this.contratoCreditoRepository = contratoCreditoRepository;
+    }
+
+    public PedidoResponse criar(String email, CriarPedidoRequest dados) {
+        Cliente cliente = buscarClientePorEmail(email);
+
+        Automovel automovel = automovelRepository.findById(dados.automovelId())
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "Automóvel não encontrado."));
+
+        validarDatas(dados.dataInicio(), dados.dataFim());
+
+        validarDisponibilidade(
+                automovel.getId(),
+                dados.dataInicio(),
+                dados.dataFim(),
+                null);
+
+        long quantidadeDias = ChronoUnit.DAYS.between(
+                dados.dataInicio(),
+                dados.dataFim());
+
+        BigDecimal valorTotal = automovel.getValorDiaria()
+                .multiply(BigDecimal.valueOf(quantidadeDias));
+
+        Pedido pedido = new Pedido();
+        pedido.setCliente(cliente);
+        pedido.setAutomovel(automovel);
+        pedido.setDataInicio(dados.dataInicio());
+        pedido.setDataFim(dados.dataFim());
+        pedido.setValorTotal(valorTotal);
+        pedido.setStatus(StatusPedido.EM_ANALISE);
+
+        Pedido pedidoSalvo = pedidoRepository.save(pedido);
+
+        return converterParaResponse(pedidoSalvo);
+    }
+
+    @Transactional(readOnly = true)
+    public List<PedidoResponse> listar(String email) {
+        Cliente cliente = buscarClientePorEmail(email);
+
+        return pedidoRepository.findAllByClienteId(cliente.getId())
+                .stream()
+                .map(this::converterParaResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public PedidoResponse buscarPorId(String email, UUID pedidoId) {
+        Cliente cliente = buscarClientePorEmail(email);
+
+        Pedido pedido = buscarPedidoDoCliente(pedidoId, cliente.getId());
+
+        return converterParaResponse(pedido);
+    }
+
+    public PedidoResponse atualizar(
+            String email,
+            UUID pedidoId,
+            AtualizarPedidoRequest dados) {
+
+        Cliente cliente = buscarClientePorEmail(email);
+
+        Pedido pedido = buscarPedidoDoCliente(pedidoId, cliente.getId());
+
+        if (pedido.getStatus() != StatusPedido.EM_ANALISE) {
+            throw new IllegalArgumentException(
+                    "Somente pedidos em análise podem ser atualizados.");
         }
 
-        public PedidoResponse criar(String email, CriarPedidoRequest dados) {
-                Cliente cliente = buscarClientePorEmail(email);
+        atualizarPeriodo(pedido, dados);
 
-                Automovel automovel = automovelRepository.findById(dados.automovelId())
-                                .orElseThrow(() -> new EntityNotFoundException(
-                                                "Automóvel não encontrado."));
+        Pedido pedidoAtualizado = pedidoRepository.save(pedido);
 
-                validarDatas(dados.dataInicio(), dados.dataFim());
+        return converterParaResponse(pedidoAtualizado);
+    }
 
-                validarDisponibilidade(
-                                automovel.getId(),
-                                dados.dataInicio(),
-                                dados.dataFim(),
-                                null);
+    /**
+     * Permite que um agente altere o período de um pedido em análise.
+     */
+    public PedidoDetalheResponse atualizarPeriodoPorAgente(
+            String email,
+            UUID pedidoId,
+            AtualizarPedidoRequest dados) {
 
-                long quantidadeDias = ChronoUnit.DAYS.between(
-                                dados.dataInicio(),
-                                dados.dataFim());
+        Agente agente = agenteRepository.findByEmail(email)
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "Agente não encontrado."));
 
-                BigDecimal valorTotal = automovel.getValorDiaria()
-                                .multiply(BigDecimal.valueOf(quantidadeDias));
+        Pedido pedido = pedidoRepository.findById(pedidoId)
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "Pedido não encontrado."));
 
-                Pedido pedido = new Pedido();
-                pedido.setCliente(cliente);
-                pedido.setAutomovel(automovel);
-                pedido.setDataInicio(dados.dataInicio());
-                pedido.setDataFim(dados.dataFim());
-                pedido.setValorTotal(valorTotal);
-                pedido.setStatus(StatusPedido.EM_ANALISE);
-
-                Pedido pedidoSalvo = pedidoRepository.save(pedido);
-
-                return converterParaResponse(pedidoSalvo);
+        if (pedido.getStatus() != StatusPedido.EM_ANALISE) {
+            throw new IllegalArgumentException(
+                    "Somente pedidos em análise podem ter o período alterado.");
         }
 
-        @Transactional(readOnly = true)
-        public List<PedidoResponse> listar(String email) {
-                Cliente cliente = buscarClientePorEmail(email);
+        // Confirma que o pedido está acessível ao agente.
+        buscarDetalhePorAgente(email, pedidoId);
 
-                return pedidoRepository.findAllByClienteId(cliente.getId())
-                                .stream()
-                                .map(this::converterParaResponse)
-                                .toList();
+        atualizarPeriodo(pedido, dados);
+
+        Pedido pedidoAtualizado = pedidoRepository.save(pedido);
+
+        return converterParaDetalhe(pedidoAtualizado);
+    }
+
+    /**
+     * Centraliza a validação das datas, a disponibilidade e o recálculo
+     * do valor total, evitando duplicação entre cliente e agente.
+     */
+    private void atualizarPeriodo(
+            Pedido pedido,
+            AtualizarPedidoRequest dados) {
+
+        validarDatas(dados.dataInicio(), dados.dataFim());
+
+        validarDisponibilidade(
+                pedido.getAutomovel().getId(),
+                dados.dataInicio(),
+                dados.dataFim(),
+                pedido.getId());
+
+        long quantidadeDias = ChronoUnit.DAYS.between(
+                dados.dataInicio(),
+                dados.dataFim());
+
+        BigDecimal valorTotal = pedido.getAutomovel()
+                .getValorDiaria()
+                .multiply(BigDecimal.valueOf(quantidadeDias));
+
+        pedido.setDataInicio(dados.dataInicio());
+        pedido.setDataFim(dados.dataFim());
+        pedido.setValorTotal(valorTotal);
+    }
+
+    public void cancelar(String email, UUID pedidoId) {
+        Cliente cliente = buscarClientePorEmail(email);
+
+        Pedido pedido = buscarPedidoDoCliente(pedidoId, cliente.getId());
+
+        if (pedido.getStatus() != StatusPedido.EM_ANALISE
+                && pedido.getStatus() != StatusPedido.APROVADO) {
+            throw new IllegalArgumentException(
+                    "Somente pedidos em análise ou aprovados podem ser cancelados.");
         }
 
-        @Transactional(readOnly = true)
-        public PedidoResponse buscarPorId(String email, UUID pedidoId) {
-                Cliente cliente = buscarClientePorEmail(email);
+        pedido.setStatus(StatusPedido.CANCELADO);
 
-                Pedido pedido = buscarPedidoDoCliente(pedidoId, cliente.getId());
+        pedidoRepository.save(pedido);
+    }
 
-                return converterParaResponse(pedido);
+    @Transactional(readOnly = true)
+    public PedidoDetalheResponse buscarDetalhePorCliente(
+            String email,
+            UUID pedidoId) {
+
+        Cliente cliente = buscarClientePorEmail(email);
+
+        Pedido pedido = buscarPedidoDoCliente(pedidoId, cliente.getId());
+
+        return converterParaDetalhe(pedido);
+    }
+
+    @Transactional(readOnly = true)
+    public PedidoDetalheResponse buscarDetalhePorAgente(
+            String email,
+            UUID pedidoId) {
+
+        Agente agente = agenteRepository.findByEmail(email)
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "Agente não encontrado."));
+
+        Pedido pedido = pedidoRepository.findById(pedidoId)
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "Pedido não encontrado."));
+
+        boolean pedidoEmAnaliseOuAprovado =
+                pedido.getStatus() == StatusPedido.EM_ANALISE
+                        || pedido.getStatus() == StatusPedido.APROVADO;
+
+        ParecerFinanceiro parecer = parecerFinanceiroRepository
+                .findByPedidoId(pedidoId)
+                .orElse(null);
+
+        ContratoAluguel contratoAluguel = contratoAluguelRepository
+                .findByPedidoId(pedidoId)
+                .orElse(null);
+
+        ContratoCredito contratoCredito = null;
+
+        if (contratoAluguel != null) {
+            contratoCredito = contratoCreditoRepository
+                    .findByContratoAluguelId(contratoAluguel.getId())
+                    .orElse(null);
         }
 
-        public PedidoResponse atualizar(
-                        String email,
-                        UUID pedidoId,
-                        AtualizarPedidoRequest dados) {
+        boolean agenteResponsavelPeloParecer = parecer != null
+                && parecer.getAgente().getId().equals(agente.getId());
 
-                Cliente cliente = buscarClientePorEmail(email);
+        boolean agenteResponsavelPeloContrato = contratoAluguel != null
+                && contratoAluguel.getAgente().getId().equals(agente.getId());
 
-                Pedido pedido = buscarPedidoDoCliente(pedidoId, cliente.getId());
+        boolean bancoResponsavelPeloCredito = contratoCredito != null
+                && contratoCredito.getBanco().getId().equals(agente.getId());
 
-                if (pedido.getStatus() != StatusPedido.EM_ANALISE) {
-                        throw new IllegalArgumentException(
-                                        "Somente pedidos em análise podem ser atualizados.");
-                }
+        if (!pedidoEmAnaliseOuAprovado
+                && !agenteResponsavelPeloParecer
+                && !agenteResponsavelPeloContrato
+                && !bancoResponsavelPeloCredito) {
 
-                validarDatas(dados.dataInicio(), dados.dataFim());
-
-                validarDisponibilidade(
-                                pedido.getAutomovel().getId(),
-                                dados.dataInicio(),
-                                dados.dataFim(),
-                                pedido.getId());
-
-                long quantidadeDias = ChronoUnit.DAYS.between(
-                                dados.dataInicio(),
-                                dados.dataFim());
-
-                BigDecimal valorTotal = pedido.getAutomovel()
-                                .getValorDiaria()
-                                .multiply(BigDecimal.valueOf(quantidadeDias));
-
-                pedido.setDataInicio(dados.dataInicio());
-                pedido.setDataFim(dados.dataFim());
-                pedido.setValorTotal(valorTotal);
-
-                Pedido pedidoAtualizado = pedidoRepository.save(pedido);
-
-                return converterParaResponse(pedidoAtualizado);
+            throw new IllegalArgumentException(
+                    "Você não tem permissão para consultar este pedido.");
         }
 
-        public void cancelar(String email, UUID pedidoId) {
-                Cliente cliente = buscarClientePorEmail(email);
+        return converterParaDetalhe(pedido);
+    }
 
-                Pedido pedido = buscarPedidoDoCliente(pedidoId, cliente.getId());
+    @Transactional(readOnly = true)
+    public List<RendimentoResponse> listarRendimentosDoClientePorAgente(
+            String email,
+            UUID pedidoId) {
 
-                if (pedido.getStatus() != StatusPedido.EM_ANALISE
-                                && pedido.getStatus() != StatusPedido.APROVADO) {
-                        throw new IllegalArgumentException(
-                                        "Somente pedidos em análise ou aprovados podem ser cancelados.");
-                }
+        buscarDetalhePorAgente(email, pedidoId);
 
-                pedido.setStatus(StatusPedido.CANCELADO);
+        Pedido pedido = pedidoRepository.findById(pedidoId)
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "Pedido não encontrado."));
 
-                pedidoRepository.save(pedido);
+        return pedido.getCliente().getRendimentos()
+                .stream()
+                .map(r -> new RendimentoResponse(
+                        r.getId(),
+                        r.getEntidadeEmpregadora(),
+                        r.getValor()))
+                .toList();
+    }
+
+    private Cliente buscarClientePorEmail(String email) {
+        return clienteRepository.findByEmail(email)
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "Cliente não encontrado."));
+    }
+
+    private Pedido buscarPedidoDoCliente(UUID pedidoId, UUID clienteId) {
+        return pedidoRepository.findByIdAndClienteId(pedidoId, clienteId)
+                .orElseThrow(() -> new EntityNotFoundException(
+                        "Pedido não encontrado."));
+    }
+
+    private void validarDatas(LocalDate dataInicio, LocalDate dataFim) {
+        if (dataInicio == null || dataFim == null) {
+            throw new IllegalArgumentException(
+                    "As datas de início e fim são obrigatórias.");
         }
 
-        @Transactional(readOnly = true)
-        public PedidoDetalheResponse buscarDetalhePorCliente(
-                        String email,
-                        UUID pedidoId) {
-
-                Cliente cliente = buscarClientePorEmail(email);
-
-                Pedido pedido = buscarPedidoDoCliente(pedidoId, cliente.getId());
-
-                return converterParaDetalhe(pedido);
+        if (!dataInicio.isAfter(LocalDate.now())) {
+            throw new IllegalArgumentException(
+                    "A data de início deve ser futura.");
         }
 
-        @Transactional(readOnly = true)
-        public PedidoDetalheResponse buscarDetalhePorAgente(
-                        String email,
-                        UUID pedidoId) {
+        if (!dataFim.isAfter(dataInicio)) {
+            throw new IllegalArgumentException(
+                    "A data de fim deve ser posterior à data de início.");
+        }
+    }
 
-                Agente agente = agenteRepository.findByEmail(email)
-                                .orElseThrow(() -> new EntityNotFoundException(
-                                                "Agente não encontrado."));
+    private void validarDisponibilidade(
+            UUID automovelId,
+            LocalDate dataInicio,
+            LocalDate dataFim,
+            UUID pedidoIdIgnorado) {
 
-                Pedido pedido = pedidoRepository.findById(pedidoId)
-                                .orElseThrow(() -> new EntityNotFoundException(
-                                                "Pedido não encontrado."));
+        boolean existeConflito;
 
-                boolean pedidoEmAnaliseOuAprovado = pedido.getStatus() == StatusPedido.EM_ANALISE
-                                || pedido.getStatus() == StatusPedido.APROVADO;
-
-                ParecerFinanceiro parecer = parecerFinanceiroRepository
-                                .findByPedidoId(pedidoId)
-                                .orElse(null);
-
-                ContratoAluguel contratoAluguel = contratoAluguelRepository
-                                .findByPedidoId(pedidoId)
-                                .orElse(null);
-
-                ContratoCredito contratoCredito = null;
-
-                if (contratoAluguel != null) {
-                        contratoCredito = contratoCreditoRepository
-                                        .findByContratoAluguelId(contratoAluguel.getId())
-                                        .orElse(null);
-                }
-
-                boolean agenteResponsavelPeloParecer = parecer != null
-                                && parecer.getAgente().getId().equals(agente.getId());
-
-                boolean agenteResponsavelPeloContrato = contratoAluguel != null
-                                && contratoAluguel.getAgente().getId().equals(agente.getId());
-
-                boolean bancoResponsavelPeloCredito = contratoCredito != null
-                                && contratoCredito.getBanco().getId().equals(agente.getId());
-
-                if (!pedidoEmAnaliseOuAprovado
-                                && !agenteResponsavelPeloParecer
-                                && !agenteResponsavelPeloContrato
-                                && !bancoResponsavelPeloCredito) {
-
-                        throw new IllegalArgumentException(
-                                        "Você não tem permissão para consultar este pedido.");
-                }
-
-                return converterParaDetalhe(pedido);
+        if (pedidoIdIgnorado == null) {
+            existeConflito = pedidoRepository
+                    .existsByAutomovelIdAndStatusInAndDataInicioLessThanAndDataFimGreaterThan(
+                            automovelId,
+                            List.of(
+                                    StatusPedido.EM_ANALISE,
+                                    StatusPedido.APROVADO,
+                                    StatusPedido.CONTRATADO),
+                            dataFim,
+                            dataInicio);
+        } else {
+            existeConflito = pedidoRepository.existeConflitoAoAtualizar(
+                    automovelId,
+                    pedidoIdIgnorado,
+                    List.of(
+                            StatusPedido.EM_ANALISE,
+                            StatusPedido.APROVADO,
+                            StatusPedido.CONTRATADO),
+                    dataFim,
+                    dataInicio);
         }
 
-        @Transactional(readOnly = true)
-        public List<RendimentoResponse> listarRendimentosDoClientePorAgente(
-                        String email,
-                        UUID pedidoId) {
+        if (existeConflito) {
+            throw new IllegalArgumentException(
+                    "O automóvel não está disponível para o período informado.");
+        }
+    }
 
-                buscarDetalhePorAgente(email, pedidoId);
+    private PedidoResponse converterParaResponse(Pedido pedido) {
+        Automovel automovel = pedido.getAutomovel();
 
-                Pedido pedido = pedidoRepository.findById(pedidoId)
-                                .orElseThrow(() -> new EntityNotFoundException(
-                                                "Pedido não encontrado."));
+        return new PedidoResponse(
+                pedido.getId(),
+                pedido.getDataInicio(),
+                pedido.getDataFim(),
+                pedido.getValorTotal(),
+                pedido.getStatus(),
+                automovel.getId(),
+                automovel.getMarca(),
+                automovel.getModelo(),
+                automovel.getPlaca());
+    }
 
-                return pedido.getCliente().getRendimentos()
-                                .stream()
-                                .map(r -> new RendimentoResponse(
-                                                r.getId(),
-                                                r.getEntidadeEmpregadora(),
-                                                r.getValor()))
-                                .toList();
+    private PedidoDetalheResponse converterParaDetalhe(Pedido pedido) {
+        Automovel automovel = pedido.getAutomovel();
+        Cliente cliente = pedido.getCliente();
+
+        ParecerFinanceiro parecer = parecerFinanceiroRepository
+                .findByPedidoId(pedido.getId())
+                .orElse(null);
+
+        ContratoAluguel contratoAluguel = contratoAluguelRepository
+                .findByPedidoId(pedido.getId())
+                .orElse(null);
+
+        PedidoDetalheResponse.ParecerDetalheResponse parecerResponse = null;
+
+        if (parecer != null) {
+            Agente agenteParecer = parecer.getAgente();
+
+            parecerResponse = new PedidoDetalheResponse.ParecerDetalheResponse(
+                    parecer.getId(),
+                    parecer.getResultado().name(),
+                    parecer.getJustificativa(),
+                    parecer.getDataAvaliacao(),
+                    agenteParecer.getId(),
+                    agenteParecer.getEmail());
         }
 
-        private Cliente buscarClientePorEmail(String email) {
-                return clienteRepository.findByEmail(email)
-                                .orElseThrow(() -> new EntityNotFoundException(
-                                                "Cliente não encontrado."));
+        PedidoDetalheResponse.ContratoAluguelDetalheResponse contratoAluguelResponse = null;
+
+        if (contratoAluguel != null) {
+            Agente agenteContrato = contratoAluguel.getAgente();
+
+            ContratoCredito contratoCredito = contratoCreditoRepository
+                    .findByContratoAluguelId(contratoAluguel.getId())
+                    .orElse(null);
+
+            PedidoDetalheResponse.ContratoCreditoDetalheResponse creditoResponse = null;
+
+            if (contratoCredito != null) {
+                Banco banco = contratoCredito.getBanco();
+
+                creditoResponse = new PedidoDetalheResponse.ContratoCreditoDetalheResponse(
+                        contratoCredito.getId(),
+                        contratoCredito.getValorFinanciado(),
+                        contratoCredito.getTaxaJuros(),
+                        contratoCredito.getPrazoMeses(),
+                        banco.getId(),
+                        banco.getNome());
+            }
+
+            contratoAluguelResponse = new PedidoDetalheResponse.ContratoAluguelDetalheResponse(
+                    contratoAluguel.getId(),
+                    contratoAluguel.getDataContratacao(),
+                    agenteContrato.getId(),
+                    agenteContrato.getEmail(),
+                    creditoResponse);
         }
 
-        private Pedido buscarPedidoDoCliente(UUID pedidoId, UUID clienteId) {
-                return pedidoRepository.findByIdAndClienteId(pedidoId, clienteId)
-                                .orElseThrow(() -> new EntityNotFoundException(
-                                                "Pedido não encontrado."));
-        }
-
-        private void validarDatas(LocalDate dataInicio, LocalDate dataFim) {
-                if (dataInicio == null || dataFim == null) {
-                        throw new IllegalArgumentException(
-                                        "As datas de início e fim são obrigatórias.");
-                }
-
-                if (!dataInicio.isAfter(LocalDate.now())) {
-                        throw new IllegalArgumentException(
-                                        "A data de início deve ser futura.");
-                }
-
-                if (!dataFim.isAfter(dataInicio)) {
-                        throw new IllegalArgumentException(
-                                        "A data de fim deve ser posterior à data de início.");
-                }
-        }
-
-        private void validarDisponibilidade(
-                        UUID automovelId,
-                        LocalDate dataInicio,
-                        LocalDate dataFim,
-                        UUID pedidoIdIgnorado) {
-
-                boolean existeConflito;
-
-                if (pedidoIdIgnorado == null) {
-                        existeConflito = pedidoRepository
-                                        .existsByAutomovelIdAndStatusInAndDataInicioLessThanAndDataFimGreaterThan(
-                                                        automovelId,
-                                                        List.of(
-                                                                        StatusPedido.EM_ANALISE,
-                                                                        StatusPedido.APROVADO,
-                                                                        StatusPedido.CONTRATADO),
-                                                        dataFim,
-                                                        dataInicio);
-                } else {
-                        existeConflito = pedidoRepository.existeConflitoAoAtualizar(automovelId, pedidoIdIgnorado,
-                                        List.of(
-                                                        StatusPedido.EM_ANALISE,
-                                                        StatusPedido.APROVADO,
-                                                        StatusPedido.CONTRATADO),
-                                        dataFim,
-                                        dataInicio);
-                }
-
-                if (existeConflito) {
-                        throw new IllegalArgumentException(
-                                        "O automóvel não está disponível para o período informado.");
-                }
-        }
-
-        private PedidoResponse converterParaResponse(Pedido pedido) {
-                Automovel automovel = pedido.getAutomovel();
-
-                return new PedidoResponse(
-                                pedido.getId(),
-                                pedido.getDataInicio(),
-                                pedido.getDataFim(),
-                                pedido.getValorTotal(),
-                                pedido.getStatus(),
-                                automovel.getId(),
-                                automovel.getMarca(),
-                                automovel.getModelo(),
-                                automovel.getPlaca());
-        }
-
-        private PedidoDetalheResponse converterParaDetalhe(Pedido pedido) {
-                Automovel automovel = pedido.getAutomovel();
-                Cliente cliente = pedido.getCliente();
-
-                ParecerFinanceiro parecer = parecerFinanceiroRepository
-                                .findByPedidoId(pedido.getId())
-                                .orElse(null);
-
-                ContratoAluguel contratoAluguel = contratoAluguelRepository
-                                .findByPedidoId(pedido.getId())
-                                .orElse(null);
-
-                PedidoDetalheResponse.ParecerDetalheResponse parecerResponse = null;
-
-                if (parecer != null) {
-                        Agente agenteParecer = parecer.getAgente();
-
-                        parecerResponse = new PedidoDetalheResponse.ParecerDetalheResponse(
-                                        parecer.getId(),
-                                        parecer.getResultado().name(),
-                                        parecer.getJustificativa(),
-                                        parecer.getDataAvaliacao(),
-                                        agenteParecer.getId(),
-                                        agenteParecer.getEmail());
-                }
-
-                PedidoDetalheResponse.ContratoAluguelDetalheResponse contratoAluguelResponse = null;
-
-                if (contratoAluguel != null) {
-                        Agente agenteContrato = contratoAluguel.getAgente();
-
-                        ContratoCredito contratoCredito = contratoCreditoRepository
-                                        .findByContratoAluguelId(contratoAluguel.getId())
-                                        .orElse(null);
-
-                        PedidoDetalheResponse.ContratoCreditoDetalheResponse creditoResponse = null;
-
-                        if (contratoCredito != null) {
-                                Banco banco = contratoCredito.getBanco();
-
-                                creditoResponse = new PedidoDetalheResponse.ContratoCreditoDetalheResponse(
-                                                contratoCredito.getId(),
-                                                contratoCredito.getValorFinanciado(),
-                                                contratoCredito.getTaxaJuros(),
-                                                contratoCredito.getPrazoMeses(),
-                                                banco.getId(),
-                                                banco.getNome());
-                        }
-
-                        contratoAluguelResponse = new PedidoDetalheResponse.ContratoAluguelDetalheResponse(
-                                        contratoAluguel.getId(),
-                                        contratoAluguel.getDataContratacao(),
-                                        agenteContrato.getId(),
-                                        agenteContrato.getEmail(),
-                                        creditoResponse);
-                }
-
-                return new PedidoDetalheResponse(
-                                pedido.getId(),
-                                pedido.getDataInicio(),
-                                pedido.getDataFim(),
-                                pedido.getValorTotal(),
-                                pedido.getStatus(),
-                                automovel.getId(),
-                                automovel.getMatricula(),
-                                automovel.getAno(),
-                                automovel.getMarca(),
-                                automovel.getModelo(),
-                                automovel.getPlaca(),
-                                cliente.getId(),
-                                cliente.getNome(),
-                                parecerResponse,
-                                contratoAluguelResponse);
-        }
+        return new PedidoDetalheResponse(
+                pedido.getId(),
+                pedido.getDataInicio(),
+                pedido.getDataFim(),
+                pedido.getValorTotal(),
+                pedido.getStatus(),
+                automovel.getId(),
+                automovel.getMatricula(),
+                automovel.getAno(),
+                automovel.getMarca(),
+                automovel.getModelo(),
+                automovel.getPlaca(),
+                cliente.getId(),
+                cliente.getNome(),
+                parecerResponse,
+                contratoAluguelResponse);
+    }
 }
